@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+# bin/compile <build-dir> <cache-dir>
+
+set -e
+
+BUILD_DIR=$1
+CACHE_DIR=$2
+ENV_DIR=$3
+
+BIN_PATH="$BUILD_DIR/bin"
+TMP_PATH="$BUILD_DIR/tmp"
+mkdir -p $CACHE_DIR $BIN_PATH $TMP_PATH
+
+if [[ -f "$ENV_DIR/GO_CAR_VERSION" ]]; then
+  GO_CAR_VERSION=$(cat "$ENV_DIR/GO_CAR_VERSION")
+else
+  GO_CAR_VERSION="2.14.2"
+fi
+
+GO_CAR_URL="https://github.com/ipld/go-car/releases/download/v${GO_CAR_VERSION}/go-car_${GO_CAR_VERSION}_linux_amd64.tar.gz"
+GO_CAR_TAR="$CACHE_DIR/go-car.tar.xz"
+GO_CAR_PATH="$TMP_PATH/go-car"
+GO_CAR_BINARY="$GO_CAR_PATH/car"
+
+if [ -f $GO_CAR_TAR ]; then
+  echo "-----> Using car tar from cache"
+else
+  echo "-----> Downloading car tar"
+  curl -L $GO_CAR_URL -o $GO_CAR_TAR
+fi
+
+echo "-----> Unpacking tar"
+tar -xf $GO_CAR_TAR -C $TMP_PATH
+
+echo "-----> Setting permissions"
+chmod +x $GO_CAR_BINARY
+
+echo "-----> Moving binary to the right place"
+mv $GO_CAR_BINARY $BIN_PATH/

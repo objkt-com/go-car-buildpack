@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+
+echo "go-car-buildpack"
+exit 0
