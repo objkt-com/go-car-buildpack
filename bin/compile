@@ -24,16 +24,16 @@ fi
 
 GO_CAR_URL="https://github.com/ipld/go-car/releases/download/v${GO_CAR_VERSION}/go-car_${GO_CAR_VERSION}_linux_amd64.tar.gz"
 
-mkdir -p "$BUILD_DIR/.car"
+mkdir -p "$CACHE_DIR/.car"
 
 topic "Downloading car tar"
-curl -L $GO_CAR_URL -o "$BUILD_DIR/.car/go-car.tar.xz"
+curl -L $GO_CAR_URL -o "$CACHE_DIR/.car/go-car.tar.xz"
 
 topic "Unpacking tar"
-tar -xf "$BUILD_DIR/.car/go-car.tar.xz" -C "$BUILD_DIR/.car"
+tar -xf "$CACHE_DIR/.car/go-car.tar.xz" -C "$CACHE_DIR/.car"
 
 topic "Setting permissions"
-chmod +x "$BUILD_DIR/.car/car"
+chmod +x "$CACHE_DIR/.car/car"
 
 topic "Writing profile script"
 mkdir -p "$BUILD_DIR/.profile.d"
