@@ -1,15 +1,20 @@
 #!/usr/bin/env bash
 # bin/compile <build-dir> <cache-dir>
 
-set -e
+# fail fast
+set -eo pipefail
 
+# debug
+# set -x
+
+# parse and derive params
 BUILD_DIR=$1
 CACHE_DIR=$2
-ENV_DIR=$3
+BP_DIR=$(cd "$(dirname "$0")"; cd ..; pwd)
 
-BIN_PATH="$BUILD_DIR/bin"
-TMP_PATH="$BUILD_DIR/tmp"
-mkdir -p $CACHE_DIR $BIN_PATH $TMP_PATH
+function topic() {
+  echo "-----> $*"
+}
 
 if [[ -f "$ENV_DIR/GO_CAR_VERSION" ]]; then
   GO_CAR_VERSION=$(cat "$ENV_DIR/GO_CAR_VERSION")
@@ -18,22 +23,27 @@ else
 fi
 
 GO_CAR_URL="https://github.com/ipld/go-car/releases/download/v${GO_CAR_VERSION}/go-car_${GO_CAR_VERSION}_linux_amd64.tar.gz"
-GO_CAR_TAR="$CACHE_DIR/go-car.tar.xz"
-GO_CAR_PATH="$TMP_PATH/go-car"
-GO_CAR_BINARY="$GO_CAR_PATH/car"
 
-if [ -f $GO_CAR_TAR ]; then
-  echo "-----> Using car tar from cache"
-else
-  echo "-----> Downloading car tar"
-  curl -L $GO_CAR_URL -o $GO_CAR_TAR
-fi
+mkdir -p "$BUILD_DIR/.car"
 
-echo "-----> Unpacking tar"
-tar -xf $GO_CAR_TAR -C $TMP_PATH
+topic "Downloading car tar"
+curl -L $GO_CAR_URL -o "$BUILD_DIR/.car/go-car.tar.xz"
 
-echo "-----> Setting permissions"
-chmod +x $GO_CAR_BINARY
+topic "Unpacking tar"
+tar -xf "$BUILD_DIR/.car/go-car.tar.xz" -C "$BUILD_DIR/.car"
 
-echo "-----> Moving binary to the right place"
-mv $GO_CAR_BINARY $BIN_PATH/
+topic "Setting permissions"
+chmod +x "$BUILD_DIR/.car/car"
+
+topic "Writing profile script"
+mkdir -p "$BUILD_DIR/.profile.d"
+RUNTIME_PROFILE_SCRIPT="$BUILD_DIR/.profile.d/go-car.sh"
+cat <<EOF >"$RUNTIME_PROFILE_SCRIPT"
+export PATH="\$HOME/.car/car:\$PATH"
+EOF
+
+export PATH="$BUILD_DIR/.car/car:$PATH"
+
+topic "Exporting environment"
+BUILDPACK_EXPORT_FILE="$BP_DIR/export"
+export | grep -E -e ' (PATH)=' > "$BUILDPACK_EXPORT_FILE"
