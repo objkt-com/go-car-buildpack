@@ -28,22 +28,35 @@ GO_CAR_URL="https://github.com/ipld/go-car/releases/download/v${GO_CAR_VERSION}/
 mkdir -p "$CACHE_DIR/.car"
 
 topic "Downloading car tar"
-curl -L $GO_CAR_URL -o "$CACHE_DIR/.car/go-car.tar.xz"
+curl -L $GO_CAR_URL -o "$CACHE_DIR/.car/go-car.tar.gz"
 
 topic "Unpacking tar"
-tar -xf "$CACHE_DIR/.car/go-car.tar.xz" -C "$CACHE_DIR/.car"
+tar -xf "$CACHE_DIR/.car/go-car.tar.gz" -C "$CACHE_DIR/.car"
 
 topic "Setting permissions"
 chmod +x "$CACHE_DIR/.car/car"
+
+# Create directory in build dir and copy the binary
+topic "Moving binary to build directory"
+# Create both .car directory and bin directory (for compatibility)
+mkdir -p "$BUILD_DIR/.car"
+mkdir -p "$BUILD_DIR/bin"
+cp "$CACHE_DIR/.car/car" "$BUILD_DIR/.car/"
+# Also copy to bin directory for PATH compatibility
+cp "$CACHE_DIR/.car/car" "$BUILD_DIR/bin/"
+chmod +x "$BUILD_DIR/.car/car"
+chmod +x "$BUILD_DIR/bin/car"
 
 topic "Writing profile script"
 mkdir -p "$BUILD_DIR/.profile.d"
 RUNTIME_PROFILE_SCRIPT="$BUILD_DIR/.profile.d/go-car.sh"
 cat <<EOF >"$RUNTIME_PROFILE_SCRIPT"
-export PATH="\$HOME/.car/car:\$PATH"
+# Add both locations to PATH for better compatibility
+export PATH="\$HOME/.car:\$HOME/bin:\$PATH"
 EOF
 
-export PATH="$BUILD_DIR/.car/car:$PATH"
+# Update the current PATH to include both binary locations
+export PATH="$BUILD_DIR/.car:$BUILD_DIR/bin:$PATH"
 
 topic "Exporting environment"
 BUILDPACK_EXPORT_FILE="$BP_DIR/export"
