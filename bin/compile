@@ -1,34 +1,29 @@
 #!/usr/bin/env bash
-# bin/compile <build-dir> <cache-dir>
+# bin/compile <build-dir> <cache-dir> <env-dir>
 
 # fail fast
 set -eo pipefail
 
-# debug
-# set -x
-
-# parse and derive params
-BUILD_DIR=$1
-CACHE_DIR=$2
-ENV_DIR=$3
-BP_DIR=$(cd "$(dirname "$0")"; cd ..; pwd)
+BUILD_DIR=$(cd $1 && pwd)
+CACHE_DIR=$(cd $2 && pwd)
+ENV_DIR=$(cd $3 && pwd)
+BP_DIR=$(cd $(dirname $(dirname $0)); pwd)
 
 function topic() {
   echo "-----> $*"
 }
 
-if [[ -f "$ENV_DIR/GO_CAR_VERSION" ]]; then
-  GO_CAR_VERSION=$(cat "$ENV_DIR/GO_CAR_VERSION")
-else
-  GO_CAR_VERSION="2.14.2"
-fi
+GO_CAR_VERSION="2.12.0"
 
-GO_CAR_URL="https://github.com/ipld/go-car/releases/download/v${GO_CAR_VERSION}/go-car_${GO_CAR_VERSION}_linux_amd64.tar.gz"
+topic "Installing car binary version: ${GO_CAR_VERSION}"
+
+# Try to download a pre-built static binary if available
+STATIC_GO_CAR_URL="https://github.com/ipld/go-car/releases/download/v${GO_CAR_VERSION}/go-car_${GO_CAR_VERSION}_linux_amd64.tar.gz"
 
 mkdir -p "$CACHE_DIR/.car"
 
 topic "Downloading car tar"
-curl -L $GO_CAR_URL -o "$CACHE_DIR/.car/go-car.tar.gz"
+curl -L $STATIC_GO_CAR_URL -o "$CACHE_DIR/.car/go-car.tar.gz"
 
 topic "Unpacking tar"
 tar -xf "$CACHE_DIR/.car/go-car.tar.gz" -C "$CACHE_DIR/.car"
@@ -36,28 +31,52 @@ tar -xf "$CACHE_DIR/.car/go-car.tar.gz" -C "$CACHE_DIR/.car"
 topic "Setting permissions"
 chmod +x "$CACHE_DIR/.car/car"
 
-# Create directory in build dir and copy the binary
-topic "Moving binary to build directory"
-# Create both .car directory and bin directory (for compatibility)
-mkdir -p "$BUILD_DIR/.car"
-mkdir -p "$BUILD_DIR/bin"
-cp "$CACHE_DIR/.car/car" "$BUILD_DIR/.car/"
-# Also copy to bin directory for PATH compatibility
-cp "$CACHE_DIR/.car/car" "$BUILD_DIR/bin/"
-chmod +x "$BUILD_DIR/.car/car"
-chmod +x "$BUILD_DIR/bin/car"
+# Gigalixir creates a tarball which we need to modify
+if [ -d "$CACHE_DIR/out" ]; then
+  TARBALLS=(`ls $CACHE_DIR/out/*.tar.gz 2>/dev/null || echo ""`)
 
-topic "Writing profile script"
-mkdir -p "$BUILD_DIR/.profile.d"
-RUNTIME_PROFILE_SCRIPT="$BUILD_DIR/.profile.d/go-car.sh"
-cat <<EOF >"$RUNTIME_PROFILE_SCRIPT"
-# Add both locations to PATH for better compatibility
-export PATH="\$HOME/.car:\$HOME/bin:\$PATH"
+  if [ ${#TARBALLS[@]} -ne 0 ]; then
+    TARBALL=${TARBALLS[0]}
+    topic "Found tarball at $TARBALL - extracting to modify"
+
+    # Create a temp dir and extract the tarball
+    TEMP_DIR="$CACHE_DIR/temp_extract"
+    rm -rf "$TEMP_DIR"
+    mkdir -p "$TEMP_DIR"
+    tar -xzf "$TARBALL" -C "$TEMP_DIR"
+
+    # Add car binary to the right places
+    topic "Adding car binary to the release"
+
+    # 1. Create a directory in the root that we'll add to PATH later
+    mkdir -p "$TEMP_DIR/car_bin"
+    cp "$CACHE_DIR/.car/car" "$TEMP_DIR/car_bin/"
+    chmod +x "$TEMP_DIR/car_bin/car"
+
+    # 2. Create a .profile.d script that will set up PATH at runtime
+    mkdir -p "$TEMP_DIR/.profile.d"
+    cat > "$TEMP_DIR/.profile.d/zz_car.sh" << 'EOF'
+#!/bin/bash
+# Add car_bin to PATH
+export PATH="$HOME/car_bin:$PATH"
 EOF
+    chmod +x "$TEMP_DIR/.profile.d/zz_car.sh"
 
-# Update the current PATH to include both binary locations
-export PATH="$BUILD_DIR/.car:$BUILD_DIR/bin:$PATH"
+    # Backup original tarball
+    cp "$TARBALL" "${TARBALL}.bak"
 
-topic "Exporting environment"
-BUILDPACK_EXPORT_FILE="$BP_DIR/export"
-export | grep -E -e ' (PATH)=' > "$BUILDPACK_EXPORT_FILE"
+    # Repack modified directory back to tarball
+    topic "Repacking modified tarball"
+    tar -czf "$TARBALL" -C "$TEMP_DIR" .
+
+    topic "Car binary added to the release tarball"
+  else
+    topic "No tarball found in $CACHE_DIR/out/, cannot install car binary"
+    exit 1
+  fi
+else
+  topic "No output directory found at $CACHE_DIR/out/, cannot install car binary"
+  exit 1
+fi
+
+topic "Car binary installation complete"
